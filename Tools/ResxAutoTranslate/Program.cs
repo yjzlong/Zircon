@@ -4,9 +4,9 @@ using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
-using System.Resources;
 using System.Text;
 using System.Text.Json;
+using System.Threading.Tasks;
 using System.Xml.Linq;
 
 class Program
@@ -60,7 +60,6 @@ class Program
 
             Console.WriteLine($"  需要翻译 {toTranslate.Count} 条。");
 
-            // 逐条翻译（量不大，简单写）
             var translatedDict = new Dictionary<string, string>();
             foreach (var kv in toTranslate)
             {
@@ -82,7 +81,6 @@ class Program
                 }
             }
 
-            // 写入 zh-CN resx
             if (translatedDict.Count > 0)
             {
                 UpdateZhResx(enResxPath, zhResxPath, translatedDict);
@@ -131,20 +129,25 @@ class Program
     }
 
     /// <summary>
-    /// 读取 resx 为字典
+    /// 用 XDocument 解析 resx 到字典，不再用 ResXResourceReader
     /// </summary>
     static Dictionary<string, string> LoadResx(string path)
     {
         var dict = new Dictionary<string, string>();
 
-        using var reader = new ResXResourceReader(path);
-        reader.UseResXDataNodes = true;
+        var xdoc = XDocument.Load(path);
+        var root = xdoc.Root;
+        if (root == null) return dict;
 
-        foreach (System.Collections.DictionaryEntry entry in reader)
+        foreach (var data in root.Elements("data"))
         {
-            var node = (ResXDataNode)entry.Value;
-            var value = node.GetValue((ITypeResolutionService?)null)?.ToString() ?? "";
-            dict[entry.Key.ToString()!] = value;
+            var nameAttr = data.Attribute("name");
+            if (nameAttr == null) continue;
+
+            var valueElem = data.Element("value");
+            if (valueElem == null) continue;
+
+            dict[nameAttr.Value] = valueElem.Value ?? "";
         }
 
         return dict;
@@ -164,7 +167,6 @@ class Program
         var xdoc = XDocument.Load(zhResxPath);
         var root = xdoc.Root ?? throw new Exception("Invalid resx file");
 
-        // data 元素是 <data name="Key"><value>Text</value></data>
         foreach (var kv in newTranslations)
         {
             var key = kv.Key;
