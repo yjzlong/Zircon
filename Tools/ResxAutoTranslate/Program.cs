@@ -6,28 +6,52 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Xml.Linq;
 
 class Program
 {
-    // 仓库根目录，CI 中默认就是工作目录
     static string RootDir = Directory.GetCurrentDirectory();
-
-    // 从环境变量读取 OpenAI API Key
     static string? ApiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+
+    // 术语表缓存
+    static Dictionary<string, string> Glossary = new();
 
     static async Task Main(string[] args)
     {
+        Console.WriteLine($"Working dir: {RootDir}");
+
+        // 模式选择
+        if (args.Length > 0 && args[0].Equals("scan-cs", StringComparison.OrdinalIgnoreCase))
+        {
+            ScanHardcodedEnglish();
+            return;
+        }
+
+        // 默认模式 = 自动翻译 + 统计进度
         if (string.IsNullOrWhiteSpace(ApiKey))
         {
             Console.WriteLine("OPENAI_API_KEY 未设置，退出。");
             return;
         }
 
-        Console.WriteLine($"ResxAutoTranslate running in: {RootDir}");
+        LoadGlossary();
 
-        // 找到所有英文 resx（排除 zh-CN）
+        using var http = new HttpClient();
+        http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", ApiKey);
+
+        // 1. 自动翻译
+        await AutoTranslateResxAsync(http);
+
+        // 2. 统计进度
+        GenerateI18nStats();
+    }
+
+    #region 1. 自动翻译 RESX
+
+    static async Task AutoTranslateResxAsync(HttpClient http)
+    {
         var resxFiles = Directory.GetFiles(RootDir, "*.resx", SearchOption.AllDirectories)
             .Where(p => !p.EndsWith(".zh-CN.resx", StringComparison.OrdinalIgnoreCase))
             .ToList();
@@ -37,9 +61,6 @@ class Program
             Console.WriteLine("未找到任何 .resx 文件。");
             return;
         }
-
-        using var http = new HttpClient();
-        http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", ApiKey);
 
         int totalTranslated = 0;
 
@@ -71,6 +92,7 @@ class Program
                 try
                 {
                     var zh = await TranslateTextAsync(http, en);
+                    zh = ApplyGlossaryPostProcess(zh);
                     translatedDict[key] = zh;
                     Console.WriteLine($"      -> {zh}");
                     totalTranslated++;
@@ -88,23 +110,17 @@ class Program
             }
         }
 
-        Console.WriteLine($"\n完成。本次共翻译 {totalTranslated} 条。");
+        Console.WriteLine($"\n自动翻译完成。本次共翻译 {totalTranslated} 条。");
     }
 
-    /// <summary>
-    /// 生成对应的 zh-CN 文件路径
-    /// </summary>
     static string GetZhCnResxPath(string enResxPath)
     {
         var dir = Path.GetDirectoryName(enResxPath)!;
-        var file = Path.GetFileNameWithoutExtension(enResxPath); // e.g. Strings
+        var file = Path.GetFileNameWithoutExtension(enResxPath);
         var zhFile = file + ".zh-CN.resx";
         return Path.Combine(dir, zhFile);
     }
 
-    /// <summary>
-    /// 读取英文和中文 resx，找出“需要翻译”的 key：中文不存在 或 中文为空
-    /// </summary>
     static Dictionary<string, string> LoadDiff(string enResxPath, string zhResxPath)
     {
         var result = new Dictionary<string, string>();
@@ -128,9 +144,6 @@ class Program
         return result;
     }
 
-    /// <summary>
-    /// 用 XDocument 解析 resx 到字典，不再用 ResXResourceReader
-    /// </summary>
     static Dictionary<string, string> LoadResx(string path)
     {
         var dict = new Dictionary<string, string>();
@@ -153,12 +166,8 @@ class Program
         return dict;
     }
 
-    /// <summary>
-    /// 把翻译结果写回 zh-CN resx（保持其他键不变）
-    /// </summary>
     static void UpdateZhResx(string enResxPath, string zhResxPath, Dictionary<string, string> newTranslations)
     {
-        // 如果 zh 不存在，则先复制一份 en 的结构
         if (!File.Exists(zhResxPath))
         {
             File.Copy(enResxPath, zhResxPath);
@@ -202,17 +211,24 @@ class Program
         xdoc.Save(zhResxPath);
     }
 
-    /// <summary>
-    /// 调用 OpenAI Chat Completions 接口，把英文翻译成简体中文
-    /// </summary>
     static async Task<string> TranslateTextAsync(HttpClient http, string text)
     {
+        // 把术语表内容拼进 system prompt
+        var glossaryLines = Glossary.Select(kv => $"{kv.Key} = {kv.Value}");
+        var glossaryText = string.Join("\n", glossaryLines);
+
+        var systemPrompt = "You are a translation engine. " +
+                           "Translate English UI/game text into Simplified Chinese. " +
+                           "Use the following FIXED glossary when possible:\n" +
+                           glossaryText +
+                           "\nOnly output the translated Chinese text, no explanations.";
+
         var req = new
         {
             model = "gpt-4.1-mini",
             messages = new[]
             {
-                new { role = "system", content = "You are a translation engine. Translate English UI/game text into Simplified Chinese. Output ONLY the translated text, no explanations." },
+                new { role = "system", content = systemPrompt },
                 new { role = "user", content = text }
             }
         };
@@ -235,4 +251,178 @@ class Program
 
         return msg.Trim();
     }
+
+    #endregion
+
+    #region 2. 汉化进度统计
+
+    static void GenerateI18nStats()
+    {
+        var resxFiles = Directory.GetFiles(RootDir, "*.resx", SearchOption.AllDirectories)
+            .Where(p => !p.EndsWith(".zh-CN.resx", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        int totalKeys = 0;
+        int translatedKeys = 0;
+
+        foreach (var enPath in resxFiles)
+        {
+            var zhPath = GetZhCnResxPath(enPath);
+
+            var enDict = LoadResx(enPath);
+            var zhDict = File.Exists(zhPath) ? LoadResx(zhPath) : new Dictionary<string, string>();
+
+            totalKeys += enDict.Count;
+
+            foreach (var kv in enDict)
+            {
+                if (zhDict.TryGetValue(kv.Key, out var zhVal) && !string.IsNullOrWhiteSpace(zhVal))
+                {
+                    translatedKeys++;
+                }
+            }
+        }
+
+        double percent = totalKeys == 0 ? 100.0 : (translatedKeys * 100.0 / totalKeys);
+
+        var lines = new List<string>
+        {
+            "# Zircon 汉化进度统计",
+            "",
+            $"- 统计时间：{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} (UTC)",
+            $"- 总条目数：{totalKeys}",
+            $"- 已翻译条目：{translatedKeys}",
+            $"- 未翻译条目：{totalKeys - translatedKeys}",
+            $"- 完成度：{percent:F2}%",
+            "",
+            "（本文件由 ResxAutoTranslate 工具自动生成）"
+        };
+
+        var outDir = Path.Combine(RootDir, "Localization");
+        Directory.CreateDirectory(outDir);
+        var outPath = Path.Combine(outDir, "i18n_stats.md");
+        File.WriteAllLines(outPath, lines, Encoding.UTF8);
+
+        Console.WriteLine($"\n生成汉化统计：{outPath}");
+    }
+
+    #endregion
+
+    #region 3. 术语表加载 & 后处理
+
+    static void LoadGlossary()
+    {
+        var glossaryPath = Path.Combine(RootDir, "Tools", "ResxAutoTranslate", "Glossary.json");
+        if (!File.Exists(glossaryPath))
+        {
+            Console.WriteLine("未找到 Glossary.json，将使用默认空术语表。");
+            InitDefaultGlossary(glossaryPath);
+        }
+
+        try
+        {
+            var json = File.ReadAllText(glossaryPath, Encoding.UTF8);
+            Glossary = JsonSerializer.Deserialize<Dictionary<string, string>>(json) ?? new();
+            Console.WriteLine($"已加载术语表 {Glossary.Count} 条。");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"加载 Glossary.json 失败：{ex.Message}");
+            Glossary = new();
+        }
+    }
+
+    static void InitDefaultGlossary(string path)
+    {
+        var dict = new Dictionary<string, string>
+        {
+            { "HP", "生命值" },
+            { "MP", "魔法值" },
+            { "Health", "生命值" },
+            { "Mana", "魔法值" },
+            { "Gold", "金币" },
+            { "Game Gold", "元宝" },
+            { "Monster", "怪物" },
+            { "Boss", "首领" },
+            { "Potion", "药水" },
+            { "Red Potion", "红药" },
+            { "Blue Potion", "蓝药" },
+            { "Accuracy", "命中" },
+            { "Attack Speed", "攻击速度" },
+            { "Drop Rate", "爆率" },
+            { "Drop", "掉落" },
+            { "Experience", "经验" },
+            { "PK", "PK" },
+        };
+
+        var json = JsonSerializer.Serialize(dict, new JsonSerializerOptions { WriteIndented = true });
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, json, Encoding.UTF8);
+
+        Console.WriteLine($"已创建默认 Glossary.json：{path}");
+    }
+
+    // 翻译结果的二次替换，确保术语表生效
+    static string ApplyGlossaryPostProcess(string text)
+    {
+        foreach (var kv in Glossary)
+        {
+            // 简单处理：如果翻译结果里还带英文关键字，用对应中文替换
+            if (!string.IsNullOrEmpty(kv.Key) && !string.IsNullOrEmpty(kv.Value))
+            {
+                text = text.Replace(kv.Key, kv.Value, StringComparison.OrdinalIgnoreCase);
+            }
+        }
+
+        return text;
+    }
+
+    #endregion
+
+    #region 4. 扫描 .cs 硬编码英文
+
+    static void ScanHardcodedEnglish()
+    {
+        var csFiles = Directory.GetFiles(RootDir, "*.cs", SearchOption.AllDirectories)
+            .Where(p => !p.Contains("Tools/ResxAutoTranslate")) // 排除工具自身
+            .ToList();
+
+        Console.WriteLine($"扫描 C# 文件数量：{csFiles.Count}");
+
+        var results = new List<string>();
+        var strRegex = new Regex("\"(.*?)\"", RegexOptions.Compiled);
+
+        foreach (var file in csFiles)
+        {
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                var line = lines[i];
+
+                foreach (Match m in strRegex.Matches(line))
+                {
+                    var content = m.Groups[1].Value;
+                    if (string.IsNullOrWhiteSpace(content)) continue;
+
+                    // 如果包含英文字母且不是明显路径/格式串，就认为是候选
+                    if (Regex.IsMatch(content, "[A-Za-z]") &&
+                        !content.StartsWith("http", StringComparison.OrdinalIgnoreCase) &&
+                        !content.Contains("{0") && !content.Contains("{1"))
+                    {
+                        results.Add($"{file}({i + 1}): \"{content}\"");
+                    }
+                }
+            }
+        }
+
+        var outDir = Path.Combine(RootDir, "Localization");
+        Directory.CreateDirectory(outDir);
+        var outPath = Path.Combine(outDir, "UnlocalizedStrings.txt");
+        File.WriteAllLines(outPath, results, Encoding.UTF8);
+
+        Console.WriteLine($"扫描完成，共发现疑似未本地化字符串 {results.Count} 条。");
+        Console.WriteLine($"结果已写入：{outPath}");
+    }
+
+    #endregion
 }
