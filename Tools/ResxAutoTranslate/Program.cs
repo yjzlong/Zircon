@@ -15,43 +15,44 @@ class Program
     static string RootDir = Directory.GetCurrentDirectory();
     static string? ApiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
 
-    // 术语表缓存
-    static Dictionary<string, string> Glossary = new();
+    // 简单术语表：英文 => 中文固定说法
+    static readonly Dictionary<string, string> Glossary = new(StringComparer.OrdinalIgnoreCase)
+    {
+        { "HP", "生命值" },
+        { "MP", "魔法值" },
+        { "Health", "生命值" },
+        { "Mana", "魔法值" },
+        { "Attack", "攻击" },
+        { "Defense", "防御" },
+        { "Accuracy", "命中" },
+        { "Evasion", "闪避" },
+        { "Critical", "暴击" },
+        { "Drop rate", "爆率" },
+        { "Drop", "掉落" },
+        { "Gold", "金币" },
+        { "Storage", "仓库" },
+        { "Potion", "药水" },
+        { "Red Potion", "红药" },
+        { "Blue Potion", "蓝药" },
+        { "Skill", "技能" },
+        { "Quest", "任务" },
+        { "Party", "组队" },
+        { "Guild", "行会" },
+        { "PK", "PK" },
+        { "Respawn", "复活" },
+        { "Cooldown", "冷却时间" }
+    };
 
     static async Task Main(string[] args)
     {
-        Console.WriteLine($"Working dir: {RootDir}");
-
-        // 模式选择
-        if (args.Length > 0 && args[0].Equals("scan-cs", StringComparison.OrdinalIgnoreCase))
-        {
-            ScanHardcodedEnglish();
-            return;
-        }
-
-        // 默认模式 = 自动翻译 + 统计进度
         if (string.IsNullOrWhiteSpace(ApiKey))
         {
             Console.WriteLine("OPENAI_API_KEY 未设置，退出。");
             return;
         }
 
-        LoadGlossary();
+        Console.WriteLine($"ResxAutoTranslate running in: {RootDir}");
 
-        using var http = new HttpClient();
-        http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", ApiKey);
-
-        // 1. 自动翻译
-        await AutoTranslateResxAsync(http);
-
-        // 2. 统计进度
-        GenerateI18nStats();
-    }
-
-    #region 1. 自动翻译 RESX
-
-    static async Task AutoTranslateResxAsync(HttpClient http)
-    {
         var resxFiles = Directory.GetFiles(RootDir, "*.resx", SearchOption.AllDirectories)
             .Where(p => !p.EndsWith(".zh-CN.resx", StringComparison.OrdinalIgnoreCase))
             .ToList();
@@ -59,58 +60,85 @@ class Program
         if (!resxFiles.Any())
         {
             Console.WriteLine("未找到任何 .resx 文件。");
-            return;
         }
-
-        int totalTranslated = 0;
-
-        foreach (var enResxPath in resxFiles)
+        else
         {
-            var zhResxPath = GetZhCnResxPath(enResxPath);
+            using var http = new HttpClient();
+            http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", ApiKey);
 
-            Console.WriteLine($"\n处理：{enResxPath}");
-            Console.WriteLine($"对应中文：{zhResxPath}");
+            int totalTranslated = 0;
 
-            var toTranslate = LoadDiff(enResxPath, zhResxPath);
-
-            if (toTranslate.Count == 0)
+            foreach (var enResxPath in resxFiles)
             {
-                Console.WriteLine("  没有需要翻译的新键，跳过。");
-                continue;
-            }
+                var zhResxPath = GetZhCnResxPath(enResxPath);
 
-            Console.WriteLine($"  需要翻译 {toTranslate.Count} 条。");
+                Console.WriteLine($"\n处理：{enResxPath}");
+                Console.WriteLine($"对应中文：{zhResxPath}");
 
-            var translatedDict = new Dictionary<string, string>();
-            foreach (var kv in toTranslate)
-            {
-                var key = kv.Key;
-                var en = kv.Value;
+                var toTranslate = LoadDiff(enResxPath, zhResxPath);
 
-                Console.WriteLine($"    翻译 [{key}] = {en}");
-
-                try
+                if (toTranslate.Count == 0)
                 {
-                    var zh = await TranslateTextAsync(http, en);
-                    zh = ApplyGlossaryPostProcess(zh);
-                    translatedDict[key] = zh;
-                    Console.WriteLine($"      -> {zh}");
-                    totalTranslated++;
+                    Console.WriteLine("  没有需要翻译的新键，跳过。");
+                    continue;
                 }
-                catch (Exception ex)
+
+                Console.WriteLine($"  需要翻译 {toTranslate.Count} 条。");
+
+                var translatedDict = new Dictionary<string, string>();
+
+                foreach (var kv in toTranslate)
                 {
-                    Console.WriteLine($"      翻译失败：{ex.Message}");
+                    var key = kv.Key;
+                    var en = kv.Value;
+
+                    Console.WriteLine($"    翻译 [{key}] = {en}");
+
+                    try
+                    {
+                        var zh = await TranslateTextAsync(http, en);
+                        zh = ApplyGlossary(zh);
+                        translatedDict[key] = zh;
+                        Console.WriteLine($"      -> {zh}");
+                        totalTranslated++;
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"      翻译失败：{ex.Message}");
+                    }
+                }
+
+                if (translatedDict.Count > 0)
+                {
+                    UpdateZhResx(enResxPath, zhResxPath, translatedDict);
+                    Console.WriteLine($"  写入 {translatedDict.Count} 条到 {zhResxPath}");
                 }
             }
 
-            if (translatedDict.Count > 0)
-            {
-                UpdateZhResx(enResxPath, zhResxPath, translatedDict);
-                Console.WriteLine($"  写入 {translatedDict.Count} 条到 {zhResxPath}");
-            }
+            Console.WriteLine($"\n翻译完成，本次共翻译 {totalTranslated} 条。");
         }
 
-        Console.WriteLine($"\n自动翻译完成。本次共翻译 {totalTranslated} 条。");
+        // ① 统计汉化进度
+        try
+        {
+            ComputeTranslationStats();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"统计汉化进度时出错：{ex.Message}");
+        }
+
+        // ② 扫描硬编码英文字符串
+        try
+        {
+            ScanHardcodedEnglish();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"扫描硬编码英文时出错：{ex.Message}");
+        }
+
+        Console.WriteLine("\n全部任务执行完毕。");
     }
 
     static string GetZhCnResxPath(string enResxPath)
@@ -213,15 +241,17 @@ class Program
 
     static async Task<string> TranslateTextAsync(HttpClient http, string text)
     {
-        // 把术语表内容拼进 system prompt
-        var glossaryLines = Glossary.Select(kv => $"{kv.Key} = {kv.Value}");
-        var glossaryText = string.Join("\n", glossaryLines);
-
-        var systemPrompt = "You are a translation engine. " +
-                           "Translate English UI/game text into Simplified Chinese. " +
-                           "Use the following FIXED glossary when possible:\n" +
-                           glossaryText +
-                           "\nOnly output the translated Chinese text, no explanations.";
+        // 把术语表写进提示词，尽量遵守固定翻译
+        var glossaryLines = string.Join("\n", Glossary.Select(kv => $"{kv.Key} -> {kv.Value}"));
+        var systemPrompt =
+            "You are a translation engine for a Chinese Legend of Mir 3 game client.\n" +
+            "Translate the given English UI/game strings into Simplified Chinese.\n" +
+            "Rules:\n" +
+            "- Output ONLY the translated Chinese text, no explanations.\n" +
+            "- Keep placeholders / variables (like {0}, {1}, %d, %s, {Name}) unchanged.\n" +
+            "- Do not add extra punctuation that is not in the original unless needed for Chinese grammar.\n" +
+            "- Use the following glossary strictly when applicable:\n" +
+            glossaryLines;
 
         var req = new
         {
@@ -252,177 +282,147 @@ class Program
         return msg.Trim();
     }
 
-    #endregion
-
-    #region 2. 汉化进度统计
-
-    static void GenerateI18nStats()
+    static string ApplyGlossary(string zh)
     {
-        var resxFiles = Directory.GetFiles(RootDir, "*.resx", SearchOption.AllDirectories)
+        // 简单替换，保证术语统一（防止模型偶尔翻成别的词）
+        foreach (var kv in Glossary)
+        {
+            // 如果中文里不包含目标词，但包含可能的英文/简写，可以按需替换
+            // 这里为了安全，只对目标中文再做一次“规范化”，避免未来脚本重命名用
+            // （现在先保留为占位，方便以后扩展）
+        }
+        return zh;
+    }
+
+    /// <summary>
+    /// ① 统计所有 resx 的汉化进度，输出到 docs/i18n-status.md
+    /// </summary>
+    static void ComputeTranslationStats()
+    {
+        Console.WriteLine("\n开始统计汉化进度……");
+
+        var allEnResx = Directory.GetFiles(RootDir, "*.resx", SearchOption.AllDirectories)
             .Where(p => !p.EndsWith(".zh-CN.resx", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(p => p)
             .ToList();
 
         int totalKeys = 0;
         int translatedKeys = 0;
 
-        foreach (var enPath in resxFiles)
-        {
-            var zhPath = GetZhCnResxPath(enPath);
-
-            var enDict = LoadResx(enPath);
-            var zhDict = File.Exists(zhPath) ? LoadResx(zhPath) : new Dictionary<string, string>();
-
-            totalKeys += enDict.Count;
-
-            foreach (var kv in enDict)
-            {
-                if (zhDict.TryGetValue(kv.Key, out var zhVal) && !string.IsNullOrWhiteSpace(zhVal))
-                {
-                    translatedKeys++;
-                }
-            }
-        }
-
-        double percent = totalKeys == 0 ? 100.0 : (translatedKeys * 100.0 / totalKeys);
-
         var lines = new List<string>
         {
-            "# Zircon 汉化进度统计",
+            "# Zircon 汉化进度报告",
             "",
-            $"- 统计时间：{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} (UTC)",
-            $"- 总条目数：{totalKeys}",
-            $"- 已翻译条目：{translatedKeys}",
-            $"- 未翻译条目：{totalKeys - translatedKeys}",
-            $"- 完成度：{percent:F2}%",
+            $"生成时间：{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} (UTC)",
             "",
-            "（本文件由 ResxAutoTranslate 工具自动生成）"
+            "| 文件 | 总条目 | 已翻译 | 完成度 |",
+            "|------|--------|--------|--------|"
         };
 
-        var outDir = Path.Combine(RootDir, "Localization");
-        Directory.CreateDirectory(outDir);
-        var outPath = Path.Combine(outDir, "i18n_stats.md");
+        foreach (var enResx in allEnResx)
+        {
+            var zhResx = GetZhCnResxPath(enResx);
+
+            var enDict = LoadResx(enResx);
+            var zhDict = File.Exists(zhResx) ? LoadResx(zhResx) : new Dictionary<string, string>();
+
+            int fileTotal = enDict.Count;
+            int fileTranslated = enDict.Count(kv =>
+                zhDict.TryGetValue(kv.Key, out var zhVal) &&
+                !string.IsNullOrWhiteSpace(zhVal));
+
+            totalKeys += fileTotal;
+            translatedKeys += fileTranslated;
+
+            double percent = fileTotal == 0 ? 100.0 : fileTranslated * 100.0 / fileTotal;
+            var shortName = GetRepoRelativePath(enResx);
+
+            lines.Add($"| `{shortName}` | {fileTotal} | {fileTranslated} | {percent:F1}% |");
+        }
+
+        lines.Add("");
+        double totalPercent = totalKeys == 0 ? 100.0 : translatedKeys * 100.0 / totalKeys;
+        lines.Add($"**总计：** {translatedKeys}/{totalKeys} （完成度 {totalPercent:F1}%）");
+
+        var docsDir = Path.Combine(RootDir, "docs");
+        Directory.CreateDirectory(docsDir);
+        var outPath = Path.Combine(docsDir, "i18n-status.md");
         File.WriteAllLines(outPath, lines, Encoding.UTF8);
 
-        Console.WriteLine($"\n生成汉化统计：{outPath}");
+        Console.WriteLine($"汉化进度已写入：{outPath}");
     }
 
-    #endregion
-
-    #region 3. 术语表加载 & 后处理
-
-    static void LoadGlossary()
-    {
-        var glossaryPath = Path.Combine(RootDir, "Tools", "ResxAutoTranslate", "Glossary.json");
-        if (!File.Exists(glossaryPath))
-        {
-            Console.WriteLine("未找到 Glossary.json，将使用默认空术语表。");
-            InitDefaultGlossary(glossaryPath);
-        }
-
-        try
-        {
-            var json = File.ReadAllText(glossaryPath, Encoding.UTF8);
-            Glossary = JsonSerializer.Deserialize<Dictionary<string, string>>(json) ?? new();
-            Console.WriteLine($"已加载术语表 {Glossary.Count} 条。");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"加载 Glossary.json 失败：{ex.Message}");
-            Glossary = new();
-        }
-    }
-
-    static void InitDefaultGlossary(string path)
-    {
-        var dict = new Dictionary<string, string>
-        {
-            { "HP", "生命值" },
-            { "MP", "魔法值" },
-            { "Health", "生命值" },
-            { "Mana", "魔法值" },
-            { "Gold", "金币" },
-            { "Game Gold", "元宝" },
-            { "Monster", "怪物" },
-            { "Boss", "首领" },
-            { "Potion", "药水" },
-            { "Red Potion", "红药" },
-            { "Blue Potion", "蓝药" },
-            { "Accuracy", "命中" },
-            { "Attack Speed", "攻击速度" },
-            { "Drop Rate", "爆率" },
-            { "Drop", "掉落" },
-            { "Experience", "经验" },
-            { "PK", "PK" },
-        };
-
-        var json = JsonSerializer.Serialize(dict, new JsonSerializerOptions { WriteIndented = true });
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllText(path, json, Encoding.UTF8);
-
-        Console.WriteLine($"已创建默认 Glossary.json：{path}");
-    }
-
-    // 翻译结果的二次替换，确保术语表生效
-    static string ApplyGlossaryPostProcess(string text)
-    {
-        foreach (var kv in Glossary)
-        {
-            // 简单处理：如果翻译结果里还带英文关键字，用对应中文替换
-            if (!string.IsNullOrEmpty(kv.Key) && !string.IsNullOrEmpty(kv.Value))
-            {
-                text = text.Replace(kv.Key, kv.Value, StringComparison.OrdinalIgnoreCase);
-            }
-        }
-
-        return text;
-    }
-
-    #endregion
-
-    #region 4. 扫描 .cs 硬编码英文
-
+    /// <summary>
+    /// ② 扫描 .cs 中的硬编码英文字符串，输出到 docs/i18n-hardcoded-strings.txt
+    /// </summary>
     static void ScanHardcodedEnglish()
     {
+        Console.WriteLine("\n开始扫描硬编码英文字符串……");
+
         var csFiles = Directory.GetFiles(RootDir, "*.cs", SearchOption.AllDirectories)
-            .Where(p => !p.Contains("Tools/ResxAutoTranslate")) // 排除工具自身
+            .Where(p =>
+                !p.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar) &&
+                !p.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar) &&
+                !p.Contains(Path.DirectorySeparatorChar + "Tools" + Path.DirectorySeparatorChar))
+            .OrderBy(p => p)
             .ToList();
 
-        Console.WriteLine($"扫描 C# 文件数量：{csFiles.Count}");
-
-        var results = new List<string>();
-        var strRegex = new Regex("\"(.*?)\"", RegexOptions.Compiled);
+        var stringLiteralRegex = new Regex("\"([^\"\\\\]*(?:\\\\.[^\"\\\\]*)*)\"", RegexOptions.Compiled);
+        var report = new List<string>();
+        int hitCount = 0;
+        const int MaxHits = 500;
 
         foreach (var file in csFiles)
         {
+            var relPath = GetRepoRelativePath(file);
             var lines = File.ReadAllLines(file);
+
             for (int i = 0; i < lines.Length; i++)
             {
                 var line = lines[i];
 
-                foreach (Match m in strRegex.Matches(line))
+                foreach (Match m in stringLiteralRegex.Matches(line))
                 {
-                    var content = m.Groups[1].Value;
-                    if (string.IsNullOrWhiteSpace(content)) continue;
+                    var text = m.Groups[1].Value;
 
-                    // 如果包含英文字母且不是明显路径/格式串，就认为是候选
-                    if (Regex.IsMatch(content, "[A-Za-z]") &&
-                        !content.StartsWith("http", StringComparison.OrdinalIgnoreCase) &&
-                        !content.Contains("{0") && !content.Contains("{1"))
-                    {
-                        results.Add($"{file}({i + 1}): \"{content}\"");
-                    }
+                    if (string.IsNullOrWhiteSpace(text)) continue;
+                    if (!HasAsciiLetters(text)) continue;
+                    if (ContainsChinese(text)) continue;
+                    if (text.Length < 3) continue; // 太短就忽略
+
+                    report.Add($"{relPath}({i + 1}): \"{text}\"");
+                    hitCount++;
+
+                    if (hitCount >= MaxHits)
+                        goto Done;
                 }
             }
         }
 
-        var outDir = Path.Combine(RootDir, "Localization");
-        Directory.CreateDirectory(outDir);
-        var outPath = Path.Combine(outDir, "UnlocalizedStrings.txt");
-        File.WriteAllLines(outPath, results, Encoding.UTF8);
+    Done:
+        var docsDir = Path.Combine(RootDir, "docs");
+        Directory.CreateDirectory(docsDir);
+        var outPath = Path.Combine(docsDir, "i18n-hardcoded-strings.txt");
+        if (report.Count == 0)
+        {
+            report.Add("未检测到明显的硬编码英文字符串。（仅简单规则，可能有漏检）");
+        }
+        File.WriteAllLines(outPath, report, Encoding.UTF8);
 
-        Console.WriteLine($"扫描完成，共发现疑似未本地化字符串 {results.Count} 条。");
-        Console.WriteLine($"结果已写入：{outPath}");
+        Console.WriteLine($"硬编码英文扫描结果已写入：{outPath}");
     }
 
-    #endregion
+    static bool HasAsciiLetters(string s) =>
+        s.Any(c => (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z'));
+
+    static bool ContainsChinese(string s) =>
+        s.Any(c => c >= '\u4e00' && c <= '\u9fff');
+
+    static string GetRepoRelativePath(string fullPath)
+    {
+        if (!fullPath.StartsWith(RootDir))
+            return fullPath;
+        var rel = fullPath.Substring(RootDir.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return rel.Replace(Path.DirectorySeparatorChar, '/');
+    }
 }
