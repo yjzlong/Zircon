@@ -2,8 +2,8 @@ name: Auto Translate RESX
 
 on:
   push:
-    branches: [ master ]   # 提交到 master 就触发
-  workflow_dispatch:        # 支持手动运行
+    branches: [ master ]
+  workflow_dispatch:
 
 jobs:
   translate:
@@ -20,30 +20,57 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Restore & Build
+      # 还原点：每次翻译前打一个备份 tag
+      - name: Create backup tag before translation
+        run: |
+          ts=$(date +'%Y%m%d-%H%M%S')
+          git tag backup-$ts
+          git push origin backup-$ts
+
+      - name: Restore & Build ResxAutoTranslate
         run: |
           dotnet restore Tools/ResxAutoTranslate/ResxAutoTranslate.csproj
           dotnet build Tools/ResxAutoTranslate/ResxAutoTranslate.csproj -c Release
 
-      - name: Run ResxAutoTranslate
+      - name: Run ResxAutoTranslate (translate + stats + scan)
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           dotnet run --project Tools/ResxAutoTranslate/ResxAutoTranslate.csproj -c Release
 
+      # 提交所有变化（包括新建 zh-CN.resx、docs 里的报告）
       - name: Commit changes
         run: |
           if git status --porcelain | grep .; then
             git config user.name "i18n-bot"
             git config user.email "i18n-bot@example.com"
-            git commit -am "Auto update zh-CN translations"
+            git add -A
+            git commit -m "Auto update zh-CN translations and i18n reports" || echo "Nothing to commit."
           else
             echo "No translation changes, skipping commit."
           fi
 
       - name: Push changes
-        if: success()
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git push origin master
+          if git status --porcelain | grep .; then
+            git push origin master
+          else
+            echo "No local commits to push."
+          fi
+
+      # ④ 打包汉化资源 Zip（只打包 zh-CN.resx 和 docs 报告）
+      - name: Build localization zip
+        run: |
+          mkdir -p dist
+          zip -r dist/Zircon-CN-${{ github.run_number }}.zip \
+            . \
+            -i '*zh-CN.resx' 'docs/i18n-status.md' 'docs/i18n-hardcoded-strings.txt'
+
+      # 上传构建包，方便你在 Actions 页面一键下载
+      - name: Upload localization artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Zircon-CN-${{ github.run_number }}
+          path: dist/Zircon-CN-${{ github.run_number }}.zip
