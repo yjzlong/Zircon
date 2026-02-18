@@ -792,42 +792,68 @@ namespace Client.Controls
             UITab.AddSection(uiColoursSection);
 
             LocalColourBox = new DXColourControlPair();
+            LocalColourBox.ForeColourPairChanged += (o, e) => Config.LocalTextForeColour = LocalColourBox.ForeColourControl.BackColour;
+            LocalColourBox.BackColourPairChanged += (o, e) => Config.LocalTextBackColour = LocalColourBox.BackColourControl.BackColour;
             uiColoursSection.AddControl(CEnvir.Language.CommonControlConfigWindowColoursTabLocalChatLabel, LocalColourBox);
 
             GMWhisperInColourBox = new DXColourControlPair();
+            GMWhisperInColourBox.ForeColourPairChanged += (o, e) => Config.GMWhisperInTextForeColour = GMWhisperInColourBox.ForeColourControl.BackColour;
+            GMWhisperInColourBox.BackColourPairChanged += (o, e) => Config.GMWhisperInTextBackColour = GMWhisperInColourBox.BackColourControl.BackColour;
             uiColoursSection.AddControl(CEnvir.Language.CommonControlConfigWindowColoursTabGMWhisperInLabel, GMWhisperInColourBox);
 
             WhisperInColourBox = new DXColourControlPair();
+            WhisperInColourBox.ForeColourPairChanged += (o, e) => Config.WhisperInTextForeColour = WhisperInColourBox.ForeColourControl.BackColour;
+            WhisperInColourBox.BackColourPairChanged += (o, e) => Config.WhisperInTextBackColour = WhisperInColourBox.BackColourControl.BackColour;
             uiColoursSection.AddControl(CEnvir.Language.CommonControlConfigWindowColoursTabWhisperInLabel, WhisperInColourBox);
 
             WhisperOutColourBox = new DXColourControlPair();
+            WhisperOutColourBox.ForeColourPairChanged += (o, e) => Config.WhisperOutTextForeColour = WhisperOutColourBox.ForeColourControl.BackColour;
+            WhisperOutColourBox.BackColourPairChanged += (o, e) => Config.WhisperOutTextBackColour = WhisperOutColourBox.BackColourControl.BackColour;
             uiColoursSection.AddControl(CEnvir.Language.CommonControlConfigWindowColoursTabWhisperOutLabel, WhisperOutColourBox);
 
             GroupColourBox = new DXColourControlPair();
+            GroupColourBox.ForeColourPairChanged += (o, e) => Config.GroupTextForeColour = GroupColourBox.ForeColourControl.BackColour;
+            GroupColourBox.BackColourPairChanged += (o, e) => Config.GroupTextBackColour = GroupColourBox.BackColourControl.BackColour;
             uiColoursSection.AddControl(CEnvir.Language.CommonControlConfigWindowColoursTabGroupChatLabel, GroupColourBox);
 
             GuildColourBox = new DXColourControlPair();
+            GuildColourBox.ForeColourPairChanged += (o, e) => Config.GuildTextForeColour = GuildColourBox.ForeColourControl.BackColour;
+            GuildColourBox.BackColourPairChanged += (o, e) => Config.GuildTextBackColour = GuildColourBox.BackColourControl.BackColour;
             uiColoursSection.AddControl(CEnvir.Language.CommonControlConfigWindowColoursTabGuildChatLabel, GuildColourBox);
 
             ShoutColourBox = new DXColourControlPair();
+            ShoutColourBox.ForeColourPairChanged += (o, e) => Config.ShoutTextForeColour = ShoutColourBox.ForeColourControl.BackColour;
+            ShoutColourBox.BackColourPairChanged += (o, e) => Config.ShoutTextBackColour = ShoutColourBox.BackColourControl.BackColour;
             uiColoursSection.AddControl(CEnvir.Language.CommonControlConfigWindowColoursTabShoutChatLabel, ShoutColourBox);
 
             GlobalColourBox = new DXColourControlPair();
+            GlobalColourBox.ForeColourPairChanged += (o, e) => Config.GlobalTextForeColour = GlobalColourBox.ForeColourControl.BackColour;
+            GlobalColourBox.BackColourPairChanged += (o, e) => Config.GlobalTextBackColour = GlobalColourBox.BackColourControl.BackColour;
             uiColoursSection.AddControl(CEnvir.Language.CommonControlConfigWindowColoursTabGlobalChatLabel, GlobalColourBox);
 
             ObserverColourBox = new DXColourControlPair();
+            ObserverColourBox.ForeColourPairChanged += (o, e) => Config.ObserverTextForeColour = ObserverColourBox.ForeColourControl.BackColour;
+            ObserverColourBox.BackColourPairChanged += (o, e) => Config.ObserverTextBackColour = ObserverColourBox.BackColourControl.BackColour;
             uiColoursSection.AddControl(CEnvir.Language.CommonControlConfigWindowColoursTabObserverChatLabel, ObserverColourBox);
 
             HintColourBox = new DXColourControlPair();
+            HintColourBox.ForeColourPairChanged += (o, e) => Config.HintTextForeColour = HintColourBox.ForeColourControl.BackColour;
+            HintColourBox.BackColourPairChanged += (o, e) => Config.HintTextBackColour = HintColourBox.BackColourControl.BackColour;
             uiColoursSection.AddControl(CEnvir.Language.CommonControlConfigWindowColoursTabHintTextLabel, HintColourBox);
 
             SystemColourBox = new DXColourControlPair();
+            SystemColourBox.ForeColourPairChanged += (o, e) => Config.SystemTextForeColour = SystemColourBox.ForeColourControl.BackColour;
+            SystemColourBox.BackColourPairChanged += (o, e) => Config.SystemTextBackColour = SystemColourBox.BackColourControl.BackColour;
             uiColoursSection.AddControl(CEnvir.Language.CommonControlConfigWindowColoursTabSystemTextLabel, SystemColourBox);
 
             GainsColourBox = new DXColourControlPair();
+            GainsColourBox.ForeColourPairChanged += (o, e) => Config.GainsTextForeColour = GainsColourBox.ForeColourControl.BackColour;
+            GainsColourBox.BackColourPairChanged += (o, e) => Config.GainsTextBackColour = GainsColourBox.BackColourControl.BackColour;
             uiColoursSection.AddControl(CEnvir.Language.CommonControlConfigWindowColoursTabGainsTextLabel, GainsColourBox);
 
             AnnouncementColourBox = new DXColourControlPair();
+            AnnouncementColourBox.ForeColourPairChanged += (o, e) => Config.AnnouncementTextForeColour = AnnouncementColourBox.ForeColourControl.BackColour;
+            AnnouncementColourBox.BackColourPairChanged += (o, e) => Config.AnnouncementTextBackColour = AnnouncementColourBox.BackColourControl.BackColour;
             uiColoursSection.AddControl(CEnvir.Language.CommonControlConfigWindowColoursTabAnnouncementsLabel, AnnouncementColourBox);
 
             ResetColoursButton = new DXButton
