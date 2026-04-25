@@ -709,6 +709,10 @@ namespace Server.Envir
                 CreateSpawns();
                 CreateQuestRegions();
             }
+            else
+            {
+                CreateStartZones();
+            }
         }
 
         private static void CreateMovements(InstanceInfo instance = null, byte instanceSequence = 0, MapInfo targetMap = null)
@@ -1104,6 +1108,16 @@ namespace Server.Envir
                     if (!info.ValidBindPoints.Contains(point))
                         info.ValidBindPoints.Add(point);
                 }
+            }
+        }
+
+        private static void CreateStartZones()
+        {
+            foreach (SafeZoneInfo info in SafeZoneInfoList.Binding)
+            {
+                if (info.StartClass == RequiredClass.None && !info.RedZone) continue;
+
+                _ = GetMap(info.Region.Map);
             }
         }
 
@@ -3900,35 +3914,26 @@ namespace Server.Envir
 
         public static byte[] CreateHash(string password)
         {
-            using (RandomNumberGenerator rng = RandomNumberGenerator.Create())
-            {
-                byte[] salt = new byte[SaltSize];
-                rng.GetBytes(salt);
+            byte[] salt = RandomNumberGenerator.GetBytes(SaltSize);
+            byte[] hash = Rfc2898DeriveBytes.Pbkdf2(password, salt, Iterations, HashAlgorithmName.SHA256, hashSize);
 
-                using (Rfc2898DeriveBytes rfc = new Rfc2898DeriveBytes(password, salt, Iterations, HashAlgorithmName.SHA256))
-                {
-                    byte[] hash = rfc.GetBytes(hashSize);
+            byte[] totalHash = new byte[SaltSize + hashSize];
 
-                    byte[] totalHash = new byte[SaltSize + hashSize];
+            Buffer.BlockCopy(salt, 0, totalHash, 0, SaltSize);
+            Buffer.BlockCopy(hash, 0, totalHash, SaltSize, hashSize);
 
-                    Buffer.BlockCopy(salt, 0, totalHash, 0, SaltSize);
-                    Buffer.BlockCopy(hash, 0, totalHash, SaltSize, hashSize);
-
-                    return totalHash;
-                }
-            }
+            return totalHash;
         }
         private static bool PasswordMatch(string password, byte[] totalHash)
         {
+            if (totalHash == null || totalHash.Length != SaltSize + hashSize) return false;
+
             byte[] salt = new byte[SaltSize];
             Buffer.BlockCopy(totalHash, 0, salt, 0, SaltSize);
 
-            using (Rfc2898DeriveBytes rfc = new Rfc2898DeriveBytes(password, salt, Iterations, HashAlgorithmName.SHA256))
-            {
-                byte[] hash = rfc.GetBytes(hashSize);
+            byte[] hash = Rfc2898DeriveBytes.Pbkdf2(password, salt, Iterations, HashAlgorithmName.SHA256, hashSize);
 
-                return Functions.IsMatch(totalHash, hash, SaltSize);
-            }
+            return CryptographicOperations.FixedTimeEquals(totalHash.AsSpan(SaltSize, hashSize), hash);
         }
         #endregion
 
@@ -4124,15 +4129,14 @@ namespace Server.Envir
                 return null;
 
             if (instanceSequence >= instanceMaps.Length || instanceMaps[instanceSequence] == null)
-            {
                 return null;
-            }
 
             if (instanceMaps[instanceSequence].TryGetValue(info, out Map instanceMap))
                 return instanceMap;
 
             var instanceMapInfo = instance.Maps.FirstOrDefault(x => x.Map == info);
-            if (instanceMapInfo == null) return null;
+            if (instanceMapInfo == null) 
+                return null;
 
             lock (MapLoadLock)
             {
@@ -4164,6 +4168,7 @@ namespace Server.Envir
             for (int i = 0; i < instance.Maps.Count; i++)
             {
                 var mapInfo = instance.Maps[i];
+
                 Map map = new Map(mapInfo.Map, instance, instanceSequence, mapInfo.RespawnIndex);
                 mapInstance[instanceSequence][mapInfo.Map] = map;
                 FinaliseMapLoad(map);
