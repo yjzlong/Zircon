@@ -144,6 +144,7 @@ namespace Client.Envir
         public void Process(G.GoodVersion p)
         {
             Encryption.SetKey(p.DatabaseKey);
+            CEnvir.ServerSystemDatabaseVersion = p.SystemDatabaseVersion;
 
             LoginScene scene = DXControl.ActiveScene as LoginScene;
 
@@ -1833,10 +1834,10 @@ namespace Client.Envir
             MapObject.User.Magics[p.Info].Level = p.Level;
             MapObject.User.Magics[p.Info].Experience = p.Experience;
 
-            if (GameScene.Game.MagicBox?.Magics != null && GameScene.Game.MagicBox.Magics.ContainsKey(p.Info))
+            if (GameScene.Game.MagicBox.Magics.ContainsKey(p.Info))
                 GameScene.Game.MagicBox.Magics[p.Info].Refresh();
 
-            if (GameScene.Game.CharacterBox?.DisciplineMagics != null && GameScene.Game.CharacterBox.DisciplineMagics.ContainsKey(p.Info))
+            if (GameScene.Game.CharacterBox.DisciplineMagics.ContainsKey(p.Info))
                 GameScene.Game.CharacterBox.DisciplineMagics[p.Info].Refresh();
         }
 
