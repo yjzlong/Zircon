@@ -513,6 +513,7 @@ namespace Client.Scenes.Views
             {
                 PetModeLabel.Location = new Point(FocusBar.Location.X + FocusBar.Size.Width - PetModeLabel.Size.Width, FocusBar.Location.Y + (FocusBar.Size.Height - PetModeLabel.Size.Height) / 2 - 2);
             };
+
         }
 
         #region IDisposable

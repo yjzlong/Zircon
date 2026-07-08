@@ -379,9 +379,21 @@ namespace Client.Scenes.Views
                     }
                     break;
                 case NPCDialogType.BuySell:
+                    var goodsIndex = 0;
+
+                    foreach (MapObject ob in GameScene.Game.MapControl.Objects)
+                    {
+                        if (ob.Race != ObjectType.NPC || ob.ObjectID != info.ObjectID) continue;
+
+                        goodsIndex = ((NPCObject)ob).NPCInfo.GoodsIndex;
+                        break;
+                    }
+
+                    var goods = Page.Goods.Where(x => x.GoodsIndex == goodsIndex).ToList();
+
                     GameScene.Game.NPCGoodsBox.Location = new Point(0, Size.Height);
-                    GameScene.Game.NPCGoodsBox.Visible = Page.Goods.Count > 0;
-                    GameScene.Game.NPCGoodsBox.NewGoods(Page.Goods, Page.Currency);
+                    GameScene.Game.NPCGoodsBox.Visible = goods.Count > 0;
+                    GameScene.Game.NPCGoodsBox.NewGoods(goods, Page.Currency);
 
                     if (Page.Types.Count > 0)
                     {
@@ -769,6 +781,7 @@ namespace Client.Scenes.Views
             {
                 Location = new Point(40, Size.Height - 43),
                 Size = new Size(80, DefaultHeight),
+                LabelStyle = ButtonLabelStyle.Gold,
                 Parent = this,
                 Label = { Text = "Buy" },
                 Enabled = false,
@@ -2255,6 +2268,7 @@ namespace Client.Scenes.Views
             {
                 Location = new Point((Size.Width - 80) / 2, Size.Height - 43),
                 Size = new Size(80, DefaultHeight),
+                LabelStyle = ButtonLabelStyle.Gold,
                 Parent = this,
                 Label = { Text = "Retrieve" },
                 Enabled = false,
@@ -3447,6 +3461,7 @@ namespace Client.Scenes.Views
                 Parent = this,
                 Location = new Point(250, label.Location.Y + label.Size.Height + 40),
                 Size = new Size(100, DefaultHeight),
+                LabelStyle = ButtonLabelStyle.Gold,
                 ButtonType = ButtonType.Default,
                 Visible = false,
             };
@@ -3463,6 +3478,7 @@ namespace Client.Scenes.Views
                 Parent = this,
                 Location = new Point(250, label.Location.Y + label.Size.Height + 40),
                 Size = new Size(100, DefaultHeight),
+                LabelStyle = ButtonLabelStyle.Gold,
                 ButtonType = ButtonType.Default,
                 Visible = false,
             };
@@ -4062,6 +4078,7 @@ namespace Client.Scenes.Views
                 Parent = this,
                 Location = new Point(30, Size.Height - 42),
                 Size = new Size(80, DefaultHeight),
+                LabelStyle = ButtonLabelStyle.Gold,
                 ButtonType = ButtonType.Default,
                 Label = { Text = "Adopt" }
             };
@@ -4072,6 +4089,7 @@ namespace Client.Scenes.Views
                 Parent = this,
                 Location = new Point(Size.Width - 80 - 30, Size.Height - 42),
                 Size = new Size(80, DefaultHeight),
+                LabelStyle = ButtonLabelStyle.Gold,
                 ButtonType = ButtonType.Default,
                 Label = { Text = "Unlock" }
             };
@@ -4580,6 +4598,7 @@ namespace Client.Scenes.Views
                 Parent = this,
                 Location = new Point(30, Size.Height - 43),
                 Size = new Size(80, DefaultHeight),
+                LabelStyle = ButtonLabelStyle.Gold,
                 ButtonType = ButtonType.Default,
                 Label = { Text = "Store" },
             };
@@ -4589,6 +4608,7 @@ namespace Client.Scenes.Views
             {
                 Parent = this,
                 Size = new Size(80, DefaultHeight),
+                LabelStyle = ButtonLabelStyle.Gold,
                 ButtonType = ButtonType.Default,
                 Label = { Text = "Retrieve" },
                 Location = new Point(30, Size.Height - 43),
@@ -4600,6 +4620,7 @@ namespace Client.Scenes.Views
             {
                 Parent = this,
                 Size = new Size(80, DefaultHeight),
+                LabelStyle = ButtonLabelStyle.Gold,
                 ButtonType = ButtonType.Default,
                 Label = { Text = "Release" },
                 Location = new Point(30 + 80 + 35, Size.Height - 43)
