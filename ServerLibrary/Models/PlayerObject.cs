@@ -16011,13 +16011,15 @@ namespace Server.Models
 
                 ObjectID = ObjectID,
                 Name = Name,
-                Caption = Character.Caption,
+                Caption = ActiveMilestone?.Info.Title ?? Character.Caption,
+                CaptionOutlineColour = ActiveMilestone?.Info.OutlineColour ?? Color.Black,
                 GuildName = Character.Account.GuildMember?.Guild.GuildName,
                 NameColour = NameColour,
                 Location = CurrentLocation,
                 Direction = Direction,
 
                 Light = Stats[Stat.Light],
+                SizePercent = Stats[Stat.SizePercent],
                 Dead = Dead,
 
                 Class = Class,
@@ -16102,7 +16104,8 @@ namespace Server.Models
 
                 HorseArmour = Equipment[(int)EquipmentSlot.HorseArmour]?.Info.Shape ?? 0,
 
-                Light = Stats[Stat.Light]
+                Light = Stats[Stat.Light],
+                SizePercent = Stats[Stat.SizePercent]
             };
 
             Broadcast(p);
@@ -16123,6 +16126,7 @@ namespace Server.Models
                 ArmourColour = Equipment[(int)EquipmentSlot.Armour]?.Colour ?? Color.Empty,
             };
 
+            Enqueue(p);
             Broadcast(p);
         }
 

@@ -279,6 +279,7 @@ namespace Library.Network.ServerPackets
         public string Name { get; set; }
 
         public string Caption { get; set; }
+        public Color CaptionOutlineColour { get; set; }
         public Color NameColour { get; set; }
         public string GuildName { get; set; }
 
@@ -301,6 +302,7 @@ namespace Library.Network.ServerPackets
         public ExteriorEffect ShieldEffect { get; set; }
 
         public int Light { get; set; }
+        public int SizePercent { get; set; }
 
         public bool Dead { get; set; }
         public PoisonType Poison { get; set; }
@@ -401,6 +403,7 @@ namespace Library.Network.ServerPackets
         public int HorseArmour { get; set; }
         public int Helmet { get; set; }
         public int Light { get; set; }
+        public int SizePercent { get; set; }
 
         public bool HideHead { get; set; }
     }

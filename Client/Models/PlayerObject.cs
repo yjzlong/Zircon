@@ -281,6 +281,7 @@ namespace Client.Models
 
             Name = info.Name;
             Caption = info.Caption;
+            CaptionOutlineColour = info.CaptionOutlineColour;
             NameColour = info.NameColour;
 
             Class = info.Class;
@@ -325,6 +326,7 @@ namespace Client.Models
             ShieldEffect = info.ShieldEffect;
 
             Light = info.Light;
+            SetScale(info.SizePercent);
 
             Dead = info.Dead;
             Horse = info.Horse;
@@ -337,6 +339,11 @@ namespace Client.Models
             SetFrame(new ObjectAction(!Dead ? MirAction.Standing : MirAction.Dead, MirDirection.Up, CurrentLocation));
 
             GameScene.Game.MapControl.AddObject(this);
+        }
+
+        public void ApplySizePercent(int sizePercent)
+        {
+            SetScale(sizePercent);
         }
 
         public void UpdateLibraries()
