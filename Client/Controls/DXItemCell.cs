@@ -811,6 +811,9 @@ namespace Client.Controls
 
             CountLabel.Visible = ShowCountLabel && !Hidden && !LootBoxLocked && Item != null && (!CEnvir.IsCurrencyItem(Item.Info) && Item.Info.ItemEffect != ItemEffect.Experience) && (Item.Info.StackSize > 1 || Item.Count > 1);
             CountLabel.Text = Linked ? LinkedCount.ToString() : Item?.Count.ToString();
+
+            TextureValid = false;
+            InvalidateParentChildCache();
         }
         public void MoveItem()
         {
@@ -1409,6 +1412,25 @@ namespace Client.Controls
 
                     if (Item.Level >= Globals.AccessoryExperienceList.Count) return false;
                     break;
+                case GridType.SocketTarget:
+                    if (GridType != GridType.Inventory) return false;
+                    if (Item.Info.ItemType != ItemType.Weapon && Item.Info.ItemType != ItemType.Armour) return false;
+                    break;
+                case GridType.SocketGem:
+                    if (GridType != GridType.Inventory) return false;
+                    if (!GameScene.Game.NPCSocketBox.CanUseGem(Item)) return false;
+                    break;
+                case GridType.SocketCombine1:
+                case GridType.SocketCombine2:
+                case GridType.SocketCombine3:
+                    if (GridType != GridType.Inventory) return false;
+                    if (Item.Info.ItemType != ItemType.SocketGem) return false;
+
+                    ItemInfo combineInfo = GameScene.Game.NPCSocketCombineBox.GetInputInfo();
+                    if (combineInfo != null && combineInfo != Item.Info) return false;
+                    break;
+                case GridType.SocketCombineResult:
+                    return false;
                 case GridType.MasterRefineFragment1:
                     if ((Item.Flags & UserItemFlags.Marriage) == UserItemFlags.Marriage) return false;
                     if (Item.Info.ItemEffect != ItemEffect.Fragment1 || (Item.Flags & UserItemFlags.NonRefinable) == UserItemFlags.NonRefinable) return false;
@@ -1892,6 +1914,41 @@ namespace Client.Controls
                                 return;
                             }
 
+                            if (GameScene.Game.NPCSocketCombineBox.IsVisible)
+                            {
+                                if (Item.Info.ItemType != ItemType.SocketGem) return;
+
+                                ItemInfo combineInfo = GameScene.Game.NPCSocketCombineBox.GetInputInfo();
+                                if (combineInfo != null && combineInfo != Item.Info)
+                                {
+                                    GameScene.Game.ReceiveChat(CEnvir.Language.UnableToSocketMismatch, MessageType.System);
+                                    return;
+                                }
+
+                                DXItemCell combineCell = GameScene.Game.NPCSocketCombineBox.GetNextInputCell();
+                                if (combineCell != null)
+                                    MoveItem(combineCell);
+                                return;
+                            }
+
+                            if (GameScene.Game.NPCSocketBox.IsVisible)
+                            {
+                                switch (Item.Info.ItemType)
+                                {
+                                    case ItemType.Weapon:
+                                    case ItemType.Armour:
+                                        MoveItem(GameScene.Game.NPCSocketBox.TargetCell);
+                                        return;
+                                    case ItemType.SocketGem:
+                                        if (!GameScene.Game.NPCSocketBox.CanUseGem(Item)) return;
+
+                                        MoveItem(GameScene.Game.NPCSocketBox.GemCell);
+                                        return;
+                                }
+
+                                return;
+                            }
+
                             if (GameScene.Game.InventoryBox.IsVisible)
                             {
                                 if (GameScene.Game.InventoryBox.InvMode == InventoryMode.Sell)
@@ -2100,7 +2157,7 @@ namespace Client.Controls
                                 return;
                             }
 
-                            if (GameScene.Game.CommunicationBox.IsVisible)
+                            if (GameScene.Game.CommunicationBox.IsVisible && GameScene.Game.CommunicationBox.IsSendTabSelected)
                             {
                                 MoveItem(GameScene.Game.CommunicationBox.SendGrid);
                                 return;
@@ -2245,7 +2302,7 @@ namespace Client.Controls
                                 return;
                             }
 
-                            if (GameScene.Game.CommunicationBox.IsVisible)
+                            if (GameScene.Game.CommunicationBox.IsVisible && GameScene.Game.CommunicationBox.IsSendTabSelected)
                             {
                                 MoveItem(GameScene.Game.CommunicationBox.SendGrid);
                                 return;
