@@ -80,6 +80,7 @@ namespace Library
             MaxGuildNameLength = 15,
 
             MaxChatLength = 120,
+            MaxChatItemLinks = 10,
             MaxGuildNoticeLength = 4000,
 
             MaxBeltCount = 10,
@@ -133,6 +134,9 @@ namespace Library
         public static int
             PhysicalPoisonRate = 200,
             MagicalPoisonRate = 100;
+
+        public static int
+            MaxGemPurity = 100;
 
         public static List<string> Languages = new List<string>
         {
@@ -432,6 +436,7 @@ namespace Library
         //Server settings
         public bool StruckEnabled { get; set; }
         public bool HermitEnabled { get; set; }
+        public int MaxGemPurity { get; set; }
 
         [CompleteObject]
         public void OnComplete()

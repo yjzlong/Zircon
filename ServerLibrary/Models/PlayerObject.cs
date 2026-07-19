@@ -13,7 +13,6 @@ using System.Drawing;
 using System.Globalization;
 using System.Linq;
 using System.Reflection;
-using System.Text.RegularExpressions;
 using C = Library.Network.ClientPackets;
 using S = Library.Network.ServerPackets;
 
@@ -884,7 +883,9 @@ namespace Server.Models
                 FiltersItemType = Character.FiltersItemType,
 
                 StruckEnabled = Config.EnableStruck,
-                HermitEnabled = Config.EnableHermit
+                HermitEnabled = Config.EnableHermit,
+
+                MaxGemPurity = Config.MaxGemPurity
             };
         }
 
@@ -1503,7 +1504,7 @@ namespace Server.Models
 
         #region Communication
 
-        public void Chat(string text)
+        public void Chat(string text, List<int> linkedItemIndexes = null)
         {
             if (string.IsNullOrEmpty(text)) return;
             SEnvir.LogChat($"{Name}: {text}");
@@ -1513,12 +1514,9 @@ namespace Server.Models
             string[] parts;
 
             List<ClientUserItem> linkedItems = new List<ClientUserItem>();
-            MatchCollection matches = Globals.LinkedItemRegex.Matches(text);
-            foreach (Match match in matches)
+            int linkSearchIndex = 0;
+            foreach (int itemIndex in linkedItemIndexes?.Take(Globals.MaxChatItemLinks) ?? Enumerable.Empty<int>())
             {
-                if (!int.TryParse(match.Groups["ID"].Value, out int itemIndex)) continue;
-                if (string.IsNullOrWhiteSpace(match.Groups["Text"].Value)) continue;
-
                 UserItem item = Inventory.FirstOrDefault(e => e != null && e.Index == itemIndex);
 
                 if (item == null)
@@ -1530,8 +1528,14 @@ namespace Server.Models
                 if (item == null)
                     continue;
 
+                string token = $"[{item.Info.ItemName}]";
+                int tokenIndex = text.IndexOf(token, linkSearchIndex, StringComparison.Ordinal);
+                if (tokenIndex < 0) continue;
 
-                text = text.Replace(match.Groups["Text"].Value, item.Info.ItemName);
+                int closingBracketIndex = tokenIndex + token.Length - 1;
+                text = text.Insert(closingBracketIndex, $":{item.Index}");
+                linkSearchIndex = closingBracketIndex + item.Index.ToString().Length + 2;
+
                 if (!linkedItems.Any(e => e.Index == item.Index))
                     linkedItems.Add(item.ToClientInfo());
             }
@@ -2087,6 +2091,8 @@ namespace Server.Models
         {
             int tracking = Stats[Stat.BossTracker] + Stats[Stat.PlayerTracker];
 
+            RefreshEquipmentGemBuffs();
+
             Stats.Clear();
 
             AddBaseStats();
@@ -2384,6 +2390,52 @@ namespace Server.Models
                 AddAllObjects();
             }
         }
+
+        private void RefreshEquipmentGemBuffs()
+        {
+            UserItem weapon = Equipment[(int)EquipmentSlot.Weapon];
+            UserItem armour = Equipment[(int)EquipmentSlot.Armour];
+
+            bool hasRedGem = HasSocketGem(weapon, 1);
+            bool hasBlueGem = HasSocketGem(armour, 2);
+            bool hasCursedGem = HasSocketGem(weapon, 3) || HasSocketGem(armour, 3);
+
+            if (hasRedGem && Buffs.All(x => x.Type != BuffType.RedGem))
+            {
+                BuffAdd(BuffType.RedGem, TimeSpan.MaxValue, null, false, false, TimeSpan.Zero);
+            }
+            else if (!hasRedGem)
+            {
+                BuffRemove(BuffType.RedGem);
+            }
+
+            if (hasBlueGem && Buffs.All(x => x.Type != BuffType.BlueGem))
+            {
+                BuffAdd(BuffType.BlueGem, TimeSpan.MaxValue, null, false, false, TimeSpan.Zero);
+            }
+            else if (!hasBlueGem)
+            {
+                BuffRemove(BuffType.BlueGem);
+            }
+
+            if (hasCursedGem && Buffs.All(x => x.Type != BuffType.CursedGem))
+            {
+                BuffAdd(BuffType.CursedGem, TimeSpan.MaxValue, null, false, false, TimeSpan.Zero);
+            }
+            else if (!hasCursedGem)
+            {
+                BuffRemove(BuffType.CursedGem);
+            }
+        }
+
+        private static bool HasSocketGem(UserItem item, int shape)
+        {
+            if (item == null || (item.CurrentDurability == 0 && item.Info.Durability > 0))
+                return false;
+
+            return item.Sockets.Any(x => x.Gem?.Info.Shape == shape);
+        }
+
         public void AddBaseStats()
         {
             MaxExperience = Level < Globals.ExperienceList.Count ? Globals.ExperienceList[Level] : 0;
@@ -4148,8 +4200,8 @@ namespace Server.Models
             result.Count = info.Item?.Count ?? 0;
             result.Success = true;
 
-            LogMilestone(MilestoneType.MarketPurchase, result.Count, item: info.Item.Info);
-            SEnvir.LogMilestone(info.Character, MilestoneType.MarketSell, result.Count, item: info.Item.Info);
+            LogMilestone(MilestoneType.MarketPurchase, p.Count, item: itemInfo);
+            SEnvir.LogMilestone(info.Character, MilestoneType.MarketSell, p.Count, item: itemInfo);
 
             AuctionHistoryInfo history = SEnvir.AuctionHistoryInfoList.Binding.FirstOrDefault(x => x.Info == itemInfo.Index && x.PartIndex == partIndex) ?? SEnvir.AuctionHistoryInfoList.CreateNewObject();
 
@@ -6063,12 +6115,35 @@ namespace Server.Models
         }
         public void GainItem(params UserItem[] items)
         {
-            Enqueue(new S.ItemsGained { Items = items.Where(x => x.Info.ItemEffect != ItemEffect.Experience).Select(x => x.ToClientInfo()).ToList() });
-
             HashSet<UserQuest> changedQuests = new HashSet<UserQuest>();
+            List<ClientUserItem> gainedItems = new List<ClientUserItem>();
 
             foreach (UserItem item in items)
             {
+                foreach (UserQuest quest in Quests)
+                {
+                    if (quest.Completed) continue;
+
+                    foreach (QuestTask task in quest.QuestInfo.Tasks)
+                    {
+                        if (task.Task != QuestTaskType.GainItem || task.ItemParameter != item.Info) continue;
+
+                        if (task.MonsterDetails.Count > 0) continue;
+
+                        UserQuestTask userTask = quest.Tasks.FirstOrDefault(x => x.Task == task);
+
+                        if (userTask == null)
+                        {
+                            userTask = SEnvir.UserQuestTaskList.CreateNewObject();
+                            userTask.Task = task;
+                            userTask.Quest = quest;
+                        }
+
+                        item.UserTask = userTask;
+                        item.Flags |= UserItemFlags.QuestItem;
+                    }
+                }
+
                 if (item.UserTask != null)
                 {
                     if (item.UserTask.Completed) continue;
@@ -6113,6 +6188,8 @@ namespace Server.Models
                     continue;
                 }
 
+                gainedItems.Add(item.ToClientInfo());
+
                 bool handled = false;
                 if (item.Info.StackSize > 1 && (item.Flags & UserItemFlags.Expirable) != UserItemFlags.Expirable)
                 {
@@ -6154,6 +6231,9 @@ namespace Server.Models
                     break;
                 }
             }
+
+            if (gainedItems.Count > 0)
+                Enqueue(new S.ItemsGained { Items = gainedItems });
 
             foreach (UserQuest quest in changedQuests)
                 Enqueue(new S.QuestChanged { Quest = quest.ToClientInfo() });
@@ -10931,20 +11011,43 @@ namespace Server.Models
                 case 1:
                 case 2:
                     UserItem oldGem = targetSocket.Gem;
-                    targetSocket.Gem = success ? socketGem : cursed.Count > 0 ? SEnvir.CreateFreshItem(cursed[SEnvir.Random.Next(cursed.Count)]) : null;
+
+                    bool curseSuccess = false;
+
+                    if (success)
+                    {
+                        targetSocket.Gem = socketGem;
+                    }
+                    else
+                    {
+                        if (cursed.Count > 0)
+                        {
+                            var cursedGem = SEnvir.CreateDropItem(cursed[SEnvir.Random.Next(cursed.Count)]);
+                            var curseChance = GetSocketSuccessChance(cursedGem);
+                            curseSuccess = SEnvir.Random.Next(100) < curseChance;
+
+                            if (curseSuccess)
+                            {
+                                targetSocket.Gem = cursedGem;
+                            }
+                        }
+                    }
 
                     if (oldGem != null)
                         oldGem.Delete();
 
                     if (success)
+                    {
                         foreach (UserItemSocket duplicate in target.Sockets.Where(x => x != targetSocket && x.Gem?.Info == gemInfo))
                         {
                             UserItem duplicateGem = duplicate.Gem;
                             duplicate.Gem = null;
                             duplicateGem.Delete();
                         }
+                    }
+
                     result.SocketSlot = targetSocket.Slot;
-                    result.Message = success ? Connection.Language.NPCSocketInsertSuccess : Connection.Language.NPCSocketInsertCursed;
+                    result.Message = success ? Connection.Language.NPCSocketInsertSuccess : curseSuccess ? Connection.Language.NPCSocketInsertCursed : Connection.Language.NPCSocketInsertFailed;
                     break;
                 case 4:
                     if (success)
@@ -10979,6 +11082,7 @@ namespace Server.Models
                                 socketedGem.Delete();
                         }
                     }
+
                     result.Message = success ? Connection.Language.NPCSocketResetSuccess : Connection.Language.NPCSocketResetFailed;
                     break;
             }
@@ -10996,7 +11100,9 @@ namespace Server.Models
             if (gem.MaxDurability <= 0) return 10;
 
             long durability = (long)gem.CurrentDurability * 100;
-            long maximum = gem.Info.Durability;
+            long maximum = Math.Max(0, Config.MaxGemPurity) * 1000L;
+
+            if (maximum <= 0) return 10;
 
             if (durability >= maximum * 80) return 80;
             if (durability >= maximum * 60) return 60;
@@ -11008,9 +11114,10 @@ namespace Server.Models
 
         private static int GetSocketRecoveryChance(UserItem gem)
         {
-            if (gem.Info.Durability <= 0) return 0;
+            int maximum = Math.Max(0, Config.MaxGemPurity) * 1000;
+            if (maximum <= 0) return 0;
 
-            int durabilityPercentage = (int)Math.Max(0, Math.Min(100, (long)gem.CurrentDurability * 100 / gem.Info.Durability));
+            int durabilityPercentage = (int)Math.Max(0, Math.Min(100, (long)gem.CurrentDurability * 100 / maximum));
 
             return 100 - durabilityPercentage;
         }
@@ -11068,8 +11175,9 @@ namespace Server.Models
             result.Accepted = true;
 
             int highestDurability = gems.Max(x => x.CurrentDurability);
-            int chance = gems[0].Info.Durability > 0
-                ? (int)Math.Max(0, Math.Min(100, (long)highestDurability * 100 / gems[0].Info.Durability))
+            int maximumPurity = Math.Max(0, Config.MaxGemPurity) * 1000;
+            int chance = maximumPurity > 0
+                ? (int)Math.Max(0, Math.Min(100, (long)highestDurability * 100 / maximumPurity))
                 : 0;
 
             if (SEnvir.Random.Next(100) >= chance)
@@ -14637,7 +14745,13 @@ namespace Server.Models
                     {
                         if (SEnvir.Random.Next(info.Chance) > 0) continue;
 
-                        if (info.Region != null && !info.Region.PointList.Contains(front)) continue;
+                        if (info.Region != null)
+                        {
+                            if (info.Region.PointList == null)
+                                info.Region.CreatePoints(CurrentMap.Width);
+
+                            if (!info.Region.PointList.Contains(front)) continue;
+                        }
 
                         if (info.Quantity == 0) continue;
 
