@@ -418,7 +418,10 @@ namespace Server.Models
                 }
             }
 
-            for (int i = AliveCount; i < Info.Count; i++)
+            decimal spawnMultiplier = CurrentMap.Info.Dungeon?.SpawnMultiplier ?? 1M;
+            int spawnCount = (int)Math.Ceiling(Math.Clamp(Info.Count * spawnMultiplier, 0M, int.MaxValue));
+
+            for (int i = AliveCount; i < spawnCount; i++)
             {
                 MonsterObject mob = MonsterObject.GetMonster(Info.Monster);
 
