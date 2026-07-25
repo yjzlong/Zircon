@@ -1,4 +1,7 @@
 using MirDB;
+using System;
+using System.Linq;
+using System.Text.Json.Serialization;
 
 namespace Library.SystemModels
 {
@@ -55,6 +58,28 @@ namespace Library.SystemModels
 
         [Association("DungeonMaps", true)]
         public DBBindingList<DungeonMapInfo> Maps { get; set; }
+
+        [JsonIgnore]
+        [IgnoreProperty]
+        public int AverageMonsterLevel => (int)Math.Round(Maps
+                .Where(dungeonMap => dungeonMap.Map != null)
+                .SelectMany(dungeonMap => dungeonMap.Map.Regions)
+                .SelectMany(region => region.Respawns)
+                .Where(respawn => respawn.Monster != null && !respawn.Monster.IsBoss)
+                .Select(respawn => (double)respawn.Monster.Level)
+                .DefaultIfEmpty()
+                .Average());
+
+        [JsonIgnore]
+        [IgnoreProperty]
+        public int AverageMonsterExperience => (int)Math.Round(Maps
+                .Where(dungeonMap => dungeonMap.Map != null)
+                .SelectMany(dungeonMap => dungeonMap.Map.Regions)
+                .SelectMany(region => region.Respawns)
+                .Where(respawn => respawn.Monster != null && !respawn.Monster.IsBoss)
+                .Select(respawn => respawn.Monster.Experience)
+                .DefaultIfEmpty()
+                .Average());
 
         protected internal override void OnCreated()
         {
