@@ -73,6 +73,7 @@ namespace Client.Scenes.Views
 
             UpdateWeather();
             LLayer.UpdateLights();
+            GameScene.Game?.UpdateShadowOpacity();
             MapInfoChanged?.Invoke(this, EventArgs.Empty);
         }
 
@@ -168,7 +169,6 @@ namespace Client.Scenes.Views
         public Light LLayer;
 
         public bool ShadowPixelShaderEnabled { get; set; } = true;
-        public float ShadowPixelShaderOpacity { get; set; } = 0.4F;
 
         public Cell[,] Cells;
         public int Width, Height;
@@ -351,7 +351,7 @@ namespace Client.Scenes.Views
                 return;
             }
 
-            RenderingPipelineManager.EnableSolidShadowFillEffect(ShadowPixelShaderOpacity);
+            RenderingPipelineManager.EnableSolidShadowFillEffect(GameScene.ShadowOpacity);
             library.Draw(index, x, y, Color.White, false, opacity, ImageType.Image);
         }
 
@@ -363,7 +363,7 @@ namespace Client.Scenes.Views
                 return;
             }
 
-            RenderingPipelineManager.EnableSolidShadowFillEffect(ShadowPixelShaderOpacity);
+            RenderingPipelineManager.EnableSolidShadowFillEffect(GameScene.ShadowOpacity);
             library.DrawBlend(index, x, y, Color.White, false, rate, ImageType.Image);
         }
 
