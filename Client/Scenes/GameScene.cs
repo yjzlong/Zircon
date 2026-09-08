@@ -1252,25 +1252,7 @@ namespace Client.Scenes
 
             UpdateItemLabelLocation();
             UpdateMagicLabelLocation();
-
-            if (FameLabel != null && !FameLabel.IsDisposed)
-            {
-                int x = CEnvir.MouseLocation.X + 15, y = CEnvir.MouseLocation.Y;
-
-                if (x + FameLabel.Size.Width > UISize.Width + Location.X)
-                    x = UISize.Width - FameLabel.Size.Width + Location.X;
-
-                if (y + FameLabel.Size.Height > UISize.Height + Location.Y)
-                    y = UISize.Height - FameLabel.Size.Height + Location.Y;
-
-                if (x < Location.X)
-                    x = Location.X;
-
-                if (y <= Location.Y)
-                    y = Location.Y;
-
-                FameLabel.Location = new Point(x, y);
-            }
+            UpdateFameLabelLocation();
 
             MonsterObject mob = MouseObject as MonsterObject;
 
@@ -1968,6 +1950,28 @@ namespace Client.Scenes
 
             builder.Complete();
             FameLabel = builder.Label;
+            UpdateFameLabelLocation();
+        }
+
+        private void UpdateFameLabelLocation()
+        {
+            if (FameLabel == null || FameLabel.IsDisposed) return;
+
+            int x = CEnvir.MouseLocation.X + 15, y = CEnvir.MouseLocation.Y;
+
+            if (x + FameLabel.Size.Width > UISize.Width + Location.X)
+                x = UISize.Width - FameLabel.Size.Width + Location.X;
+
+            if (y + FameLabel.Size.Height > UISize.Height + Location.Y)
+                y = UISize.Height - FameLabel.Size.Height + Location.Y;
+
+            if (x < Location.X)
+                x = Location.X;
+
+            if (y <= Location.Y)
+                y = Location.Y;
+
+            FameLabel.Location = new Point(x, y);
         }
 
         private void CreateMagicLabel()
@@ -2126,6 +2130,27 @@ namespace Client.Scenes
                 Rectangle drawArea = new Rectangle(DisplayArea.Location, new Size(image.Width, image.Height));
                 PresentTexture(texture, sourceRectangle, Parent, drawArea, IsEnabled ? ForeColour : Color.FromArgb(75, 75, 75), this, 0, 0, RenderScale, false);
                 image.ExpireTime = Time.Now + Config.CacheDuration;
+            }
+        }
+
+        private sealed class ItemLabelDivider : DXControl
+        {
+            public ItemLabelDivider()
+            {
+                // Draw directly on the screen pixel grid, even if the tooltip is cached.
+                CacheInParent = false;
+            }
+
+            protected override void DrawControl()
+            {
+                float oldWidth = RenderingPipelineManager.GetLineWidth();
+                float oldOpacity = RenderingPipelineManager.GetOpacity();
+                // Line widths are physical pixels; each renderer handles pixel-centre snapping.
+                RenderingPipelineManager.SetLineWidth(1F);
+                RenderingPipelineManager.SetOpacity(Opacity);
+                DrawClippedHorizontalLine(DisplayArea.Left, DisplayArea.Right, DisplayArea.Top, GetBorderClipArea());
+                RenderingPipelineManager.SetOpacity(oldOpacity);
+                RenderingPipelineManager.SetLineWidth(oldWidth);
             }
         }
 
@@ -2288,10 +2313,9 @@ namespace Client.Scenes
                     {
                         y += DividerGap;
 
-                        new DXControl
+                        new ItemLabelDivider
                         {
-                            BackColour = DividerColour,
-                            DrawTexture = true,
+                            BorderColour = DividerColour,
                             IsControl = false,
                             Location = new Point(textX + 3, y),
                             Parent = Label,
