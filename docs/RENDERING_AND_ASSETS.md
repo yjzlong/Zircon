@@ -6,6 +6,8 @@
 
 Start low-level work at `Rendering/IRenderingPipeline.cs`, `RenderingPipelineManager.cs`, `RenderingPipelineContext.cs` and `RenderTexture.cs`. The manager's **PipelineFactories** currently registers Silk D3D11 and Silk Vulkan, with D3D11 as default. `RenderingPipelineIds.cs` also names OpenGL; a constant alone is not proof of a registered runtime backend. SharpDX D3D9/D3D11 source directories exist; inspect factory registration before claiming they are selectable. Vulkan's implementation file is named `Rendering/SilkVulkan/SilkVulcanRenderingPipeline.cs` (filename spelling differs from class spelling).
 
+Canonical references: [MirEffect and DXImageControl](CANONICAL_EXAMPLES.md#client-visuals-and-assets).
+
 ## Library and image identity
 
 RenderingPipelineManager is partial: `RenderingPipelineManager.cs` owns selection/common operations; `UIBorderRendering.cs` border primitives; `UICacheContext.cs` presentation coordinate/cache context; `UICacheKey.cs` cache identity; `UICacheTargetPool.cs` pooled UI targets. These all live under `RenderingCore/Rendering/`.
@@ -39,10 +41,8 @@ Client `Program.InvalidateRenderCaches/InvalidateUiRenderCaches` handles backend
 
 ## Migration context and checks
 
-Keep [vortice-migration.md](vortice-migration.md) as the existing historical migration proposal. It is not a description of the current selectable pipelines: source now contains a shared pipeline manager and Silk implementations. Consult current project files/factories first and do not reproduce the proposal's package assumptions as current facts.
+The historical `vortice-migration.md` proposal is absent from this checkout. Current backend authority is the project files and registered pipeline factories above, not historical package assumptions.
 
-`Tools/RenderingCacheChecks` is the focused cache-check executable. `Tests/GroundLootChecks` checks linked client ground-loot/effect helpers. Neither substitutes for exercising the actual graphical client.
-
-`Tools/LabelRenderingChecks` references Client for graphical label checks. World-name overlays have their own cache/lifetime implementation in `Client/Scenes/Views/MapControl.Names.cs`; inspect it together with DXLabel for name-scaling changes.
+Check project paths/scopes are in [PROJECT_MAP](PROJECT_MAP.md#supporting-folders-and-checks); automated checks do not replace exercising the graphical client. For world-name scaling, inspect `Client/Scenes/Views/MapControl.Names.cs` with DXLabel because the overlay has its own cache/lifetime.
 
 Needs verification: exact image contents/index availability in deployed ZL libraries and backend/device visual parity require the actual assets and graphics runs; this documentation does not certify either.

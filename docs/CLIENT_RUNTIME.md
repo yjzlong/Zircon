@@ -27,6 +27,8 @@ CEnvir.GameLoop
 | `Models/SpellObject` persistent world spell processing | `Models/SpellObject` visual spell actor | S.ObjectSpell, S.ObjectSpellChanged, S.ObjectRemove |
 | `Models/Map` server movement cells/population | `Scenes/Views/MapControl` map rendering/input/object list | S.MapChanged plus object packets; not equivalent classes |
 
+Canonical actor/effect references: [ItemObject and MirEffect](CANONICAL_EXAMPLES.md#client-visuals-and-assets).
+
 ## Object and animation lifecycle
 
 `Client/Envir/CConnection.cs: Process(S.ObjectPlayer/ObjectMonster/ObjectNPC/ObjectItem/ObjectSpell)` constructs the corresponding model using packet data. The models register with `GameScene.Game.MapControl.Objects`. `Process(S.ObjectRemove)` finds the object by ObjectID and calls `Remove`, including selection/display cleanup. Map changes and scene disposal are larger cleanup boundaries; inspect those when retaining references.
@@ -64,4 +66,4 @@ Main GameScene file entry points:
 | Cooldowns | server action/magic deadlines | UserObject presentation/input gating; S.MagicCooldown and object-action timing |
 | UI layout/keys | no server ownership implied | client UserModels and CEnvir.Session |
 
-Canonical feature: crafting's server partial, `CConnection.Process(S.CraftingState/Started/Ended)`, UserObject crafting fields and `Views/CraftingDialogs.cs`. It demonstrates shared definition lookup, server validation and UI progress without moving game rules into the dialog.
+Canonical reference: [crafting packet flow](CANONICAL_EXAMPLES.md#packet-flow); [activity ownership and rules](gameplay/CRAFTING_COMPANIONS_AND_ACTIVITIES.md#recipe-crafting).

@@ -16,7 +16,20 @@ DXControl
 
 Exact controls live in `Client/Controls`: DXListBox, DXTreeControl, DXTabControl, DXVScrollBar, DXHScrollBar, DXComboBox. Some files contain multiple types; follow the declaration instead of assuming every dialog has a same-named file.
 
+## Canonical examples
+
+Start with [ExitDialog or CraftingRecipeDialog](CANONICAL_EXAMPLES.md#client-ui) for simple or complex UI; use the [crafting request](CANONICAL_EXAMPLES.md#client-gameplay-request) for gameplay buttons and [DXImageControl](CANONICAL_EXAMPLES.md#library-image-usage) for image resolution/drawing.
+
 ## Ownership, state and input
+
+### Usually required
+
+* For an **existing dialog layout change**, start in its `Client/Scenes/Views` file (for example `InventoryDialog.cs`) and the DX controls already used there. Inspect `DXControl` parenting, clipping and cache invalidation when affected by the layout.
+
+### Usually NOT required
+
+* `ServerLibrary` and `LibraryCore/Network` unless the changed interaction performs a different gameplay action; `RenderingCore` unless drawing primitives/resources change.
+* GameScene construction, `WindowSetting.WindowType` and key bindings when only moving/resizing existing children. Open those integration points when adding a window or changing its lifetime/opening behavior.
 
 `DXControl.Parent` calls `OnParentChanged`, removes the control from the old Controls list, adds it to the new one, recalculates visibility/enabled/display area, and invalidates both parents' child caches. Assign Parent through the property; avoid maintaining Controls separately.
 
@@ -28,12 +41,12 @@ Visible/Enabled are local flags; IsVisible/IsEnabled reflect ancestry. Location/
 
 `DXControl.Draw` orders BeforeDraw → DrawControl → BeforeChildrenDraw → DrawChildControls → DrawBorder → AfterDraw. Event placement therefore determines whether an overlay covers children. `DrawChildControls` may cache child segments: CacheInParent, TextureValid, InvalidateChildCache and parent invalidation affect whether an event is redrawn. Inspect those branches before placing animated drawing in a cached parent.
 
-`DXImageControl.LibraryFile` + Index selects a library image; `DXButton` adds image states and mouse behavior. Examples use `LibraryFile.GameInter` and `LibraryFile.Interface`, resolved through `LibraryCore/Libraries.cs`. Do not infer a valid index from another library. UI cache/resource details: [RENDERING_AND_ASSETS](RENDERING_AND_ASSETS.md).
+`DXImageControl.LibraryFile` + Index selects an image; `DXButton` adds image states and mouse behavior. Do not infer indices across libraries; mapping and graphics resource rules live in [RENDERING_AND_ASSETS](RENDERING_AND_ASSETS.md#library-and-image-identity).
 
 ## Scene integration and examples
 
 * `Client/Scenes/Views/InventoryDialog.cs`: item-grid dialog; actual common item tooltip is `GameScene.CreateItemLabel`, not this file.
-* `Client/Scenes/Views/CraftingDialogs.cs`: CraftingDesignTab, CraftingRecipeDialog and CraftingProgressDialog; parented cells/labels, localized labels, request packets and progress state. `GameScene` owns the boxes and CConnection updates them.
+* [Crafting dialog examples](CANONICAL_EXAMPLES.md#complex-dialog) cover composed controls; [client scene integration](CLIENT_RUNTIME.md#gamescene-and-other-partials) maps their owners.
 * `Client/Controls/DXWindow.cs` and `Client/UserModels/WindowSetting.cs`: reusable window layout/settings. Inspect the window's settings identity and GameScene/menu/key action when adding a window.
 * `Client/Envir/Translations/{StringMessages,EnglishMessages,ChineseMessages}.cs`: client message definitions/implementations.
 
